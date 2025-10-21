@@ -12,12 +12,20 @@ This file automates the computation of:
 import pandas as pd
 import numpy as np
 from pathlib import Path
-import warnings
-warnings.filterwarnings("ignore")
+import logging
+from typing import Dict, Tuple, Optional
 
-# files
-INPUT_METADATA_FILE = "population_summary.csv"
-OUTPUT_DIR = Path.home() / "Downloads"
+# Configuration
+CONFIG = {
+    'input_file': Path.home() / "Downloads" / "population_summary.csv",
+    'output_dir': Path.home() / "Downloads",
+    'demographic_fields': ['sex', 'age', 'geography'],
+    'underrepresentation_threshold': 10.0
+}
+
+# File paths
+INPUT_METADATA_FILE = CONFIG['input_file']
+OUTPUT_DIR = CONFIG['output_dir']
 POPULATION_SUMMARY_FILE = OUTPUT_DIR / "metrics_summary.csv"
 MISSINGNESS_REPORT_FILE = OUTPUT_DIR / "missingness_report.csv"
 
@@ -43,97 +51,89 @@ SUPERPOP_MAP = {
     'GIH': 'SAS', 'PJL': 'SAS', 'BEB': 'SAS', 'STU': 'SAS', 'ITU': 'SAS'
 }
 
-def standardize_column_names(df):
-    """
-    Standardize the column names based on COLUMN_MAPPINGS
-    Returns df with standardized names and a mapping dictionary
-    """
-    col_map = {}
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
-    for standard_name, variants in COLUMN_MAPPINGS.items():
-        for col in df.columns:
-            if col in variants:
-                col_map[col] = standard_name
-                break
+def standardize_column_names(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, str]]:
+    """Standardize column names based on COLUMN_MAPPINGS."""
+    col_map = {col: standard_name for standard_name, variants in COLUMN_MAPPINGS.items() 
+               for col in df.columns if col in variants}
     
     df_standardized = df.rename(columns=col_map)
-    print(f"Standardized columns: {col_map}")
+    logger.info(f"Standardized columns: {col_map}")
     return df_standardized, col_map
 
-def load_metadata(file_path):
-    """Load Bren's data"""
-
-    print(f"\nLoading metadata from: {file_path}")
+def load_metadata(file_path: str) -> pd.DataFrame:
+    """Load and preprocess metadata file."""
+    logger.info(f"Loading metadata from: {file_path}")
 
     for sep in [',', '\t', '|']:
         try:
             df = pd.read_csv(file_path, sep=sep, low_memory=False)
-
             if df.shape[1] > 1:
-                print(f"Successfully loaded with separator: {repr(sep)}")
-                print(f"Shape: {df.shape[0]} rows x {df.shape[1]} columns")
+                logger.info(f"Successfully loaded with separator: {repr(sep)}")
+                logger.info(f"Shape: {df.shape[0]} rows x {df.shape[1]} columns")
                 break
-
-        except Exception as e:
+        except Exception:
             continue
-
     else:
         raise ValueError("Could not load file with any common separator")
     
-    # Standardize column names
+    # Standardize column names and clean data
     df, _ = standardize_column_names(df)
-
-    # Strip whitespace from string columns
-    for col in df.select_dtypes(include=['object']).columns:
-        df[col] = df[col].str.strip()
+    df[df.select_dtypes(include=['object']).columns] = df.select_dtypes(include=['object']).apply(lambda x: x.str.strip())
     
     return df
 
-def compute_population_summary(df):
-    """Compute population summary statistics"""
-
+def compute_population_summary(df: pd.DataFrame) -> pd.DataFrame:
+    """Compute population summary statistics."""
     # Add superpopulation if not present
     if 'superpopulation' not in df.columns and 'population' in df.columns:
+        df = df.copy()
         df['superpopulation'] = df['population'].map(SUPERPOP_MAP)
-        print("Added superpopulation mapping")
+        logger.info("Added superpopulation mapping")
     
-    # Count by population (ancestry group)
+    # Compute population counts and percentages
     pop_counts = df['population'].value_counts().reset_index()
     pop_counts.columns = ['population', 'num_indiv']
     total_indiv = pop_counts['num_indiv'].sum()
     pop_counts['percent'] = (pop_counts['num_indiv'] / total_indiv * 100).round(2)
     
-    # Count by superpopulation
+    # Compute superpopulation counts
     super_counts = df['superpopulation'].value_counts().reset_index()
     super_counts.columns = ['super_pop', 'super_num_indiv']
     super_counts['super_percent'] = (super_counts['super_num_indiv'] / total_indiv * 100).round(2)
     
-    # Merge population and superpopulation data
+    # Merge and organize data
     pop_counts['super_pop'] = pop_counts['population'].map(SUPERPOP_MAP)
     summary = pop_counts.merge(super_counts, on='super_pop', how='left')
+    summary = summary[['population', 'num_indiv', 'percent', 'super_pop', 'super_num_indiv', 'super_percent']]
     
-    # Reorder columns for clarity
-    summary = summary[['population', 'num_indiv', 'percent', 
-                       'super_pop', 'super_num_indiv', 'super_percent']]
-    
-    print(f"\nTotal individuals: {total_indiv}")
-    print(f"Number of populations: {len(pop_counts)}")
-    print(f"Number of superpopulations: {len(super_counts)}")
+    logger.info(f"Total individuals: {total_indiv:,}")
+    logger.info(f"Number of populations: {len(pop_counts)}")
+    logger.info(f"Number of superpopulations: {len(super_counts)}")
     
     return summary
 
-def compute_missingness(df):
-    """Compute missing values for demographic fields"""
-
-    demographic_fields = ['sex', 'age', 'geography']
-    available_fields = [f for f in demographic_fields if f in df.columns]
+def compute_missingness(df: pd.DataFrame) -> pd.DataFrame:
+    """Compute missing values for demographic fields."""
+    logger.info(f"Looking for demographic fields: {CONFIG['demographic_fields']}")
+    logger.info(f"Available columns: {list(df.columns)}")
+    
+    available_fields = [f for f in CONFIG['demographic_fields'] if f in df.columns]
+    logger.info(f"Found demographic fields: {available_fields}")
     
     if not available_fields:
-        print("WARNING: No demographic fields found in data")
+        logger.warning("No demographic fields found in data")
         return pd.DataFrame()
     
-    missingness_data = []
     total_records = len(df)
+    missingness_data = []
     
     for field in available_fields:
         missing_count = df[field].isna().sum()
@@ -148,38 +148,26 @@ def compute_missingness(df):
             'missing_percent': missing_percent
         })
         
-        print(f"{field:12} - Missing: {missing_count:5} ({missing_percent:5.1f}%)")
+        logger.info(f"{field:12} - Missing: {missing_count:5,} ({missing_percent:5.1f}%)")
     
     return pd.DataFrame(missingness_data)
 
-def compute_shannon_diversity(df):
-    """
-    Calculate Shannon Diversity Index based on ancestry proportions (Cyan's task).
-    
-    H = -Σ(p_i * ln(p_i))
-    where p_i is the proportion of individuals in group i
-    """
-    
+def compute_shannon_diversity(df: pd.DataFrame) -> Dict[str, float]:
+    """Calculate Shannon Diversity Index based on ancestry proportions."""
     # Calculate proportions
     pop_counts = df['population'].value_counts()
     proportions = pop_counts / pop_counts.sum()
     
-    # Shannon Index
+    # Shannon Index: H = -Σ(p_i * ln(p_i))
     shannon_index = -np.sum(proportions * np.log(proportions))
-    
-    # Maximum possible diversity (if all groups were equal)
     max_diversity = np.log(len(proportions))
-    
-    # Evenness (how evenly distributed populations are)
     evenness = shannon_index / max_diversity
     
-    print(f"\nShannon Diversity Index: {shannon_index:.4f}")
-    print(f"Maximum possible diversity: {max_diversity:.4f}")
-    print(f"Evenness: {evenness:.4f} (0=uneven, 1=perfectly even)")
-    print(f"\nInterpretation:")
-    print(f"  - Higher values indicate greater diversity")
-    print(f"  - This dataset has {len(proportions)} distinct populations")
-    print(f"  - Evenness of {evenness:.2%} means populations are {'relatively balanced' if evenness > 0.8 else 'somewhat imbalanced'}")
+    logger.info(f"Shannon Diversity Index: {shannon_index:.4f}")
+    logger.info(f"Maximum possible diversity: {max_diversity:.4f}")
+    logger.info(f"Evenness: {evenness:.4f} (0=uneven, 1=perfectly even)")
+    logger.info(f"Dataset has {len(proportions)} distinct populations")
+    logger.info(f"Evenness of {evenness:.2%} means populations are {'relatively balanced' if evenness > 0.8 else 'somewhat imbalanced'}")
     
     return {
         'shannon_index': shannon_index,
@@ -188,111 +176,129 @@ def compute_shannon_diversity(df):
         'num_populations': len(proportions)
     }
 
-def save_missingness_report(missingness_df, shannon_dict, output_file):
-    """
-    Save missingness statistics and Shannon Index to CSV with interpretive notes.
-    """
-    print(f"\nSaving missingness report to: {output_file}")
+def save_missingness_report(missingness_df: pd.DataFrame, shannon_dict: Dict[str, float], output_file: Path) -> None:
+    """Save missingness statistics and Shannon Index to CSV with interpretive notes."""
+    logger.info(f"Saving missingness report to: {output_file}")
     
-    # Create report sections
     with open(output_file, 'w') as f:
         # Header
         f.write("# 1000 Genomes Missingness and Diversity Report\n")
         f.write("# Generated by: extract_metrics.py (Ashwin)\n\n")
-        
-        # Missingness section
         f.write("## MISSINGNESS ANALYSIS\n")
-    
-    # Append missingness data
-    missingness_df.to_csv(output_file, mode='a', index=False)
-    
-    # Append Shannon diversity
-    with open(output_file, 'a') as f:
+        
+        # Write missingness data as CSV
+        f.write("field,total_records,present_count,missing_count,missing_percent\n")
+        for _, row in missingness_df.iterrows():
+            f.write(f"{row['field']},{row['total_records']},{row['present_count']},{row['missing_count']},{row['missing_percent']}\n")
+        
+        # Write Shannon diversity
         f.write("\n## SHANNON DIVERSITY INDEX\n")
         f.write("metric,value\n")
-        f.write(f"shannon_index,{shannon_dict['shannon_index']:.4f}\n")
-        f.write(f"max_diversity,{shannon_dict['max_diversity']:.4f}\n")
-        f.write(f"evenness,{shannon_dict['evenness']:.4f}\n")
-        f.write(f"num_populations,{shannon_dict['num_populations']}\n")
+        for key, value in shannon_dict.items():
+            f.write(f"{key},{value:.4f}\n")
         
+        # Write interpretation notes
         f.write("\n## INTERPRETATION NOTES\n")
-        f.write(f"# Shannon Index of {shannon_dict['shannon_index']:.4f} indicates ")
-        if shannon_dict['shannon_index'] > 2.5:
-            f.write("high genetic diversity across populations.\n")
-        elif shannon_dict['shannon_index'] > 2.0:
-            f.write("moderate-to-high diversity across populations.\n")
-        else:
-            f.write("moderate diversity with some dominant populations.\n")
+        si = shannon_dict['shannon_index']
+        evenness = shannon_dict['evenness']
         
-        f.write(f"# Evenness of {shannon_dict['evenness']:.2%} suggests populations are ")
-        if shannon_dict['evenness'] > 0.85:
-            f.write("relatively balanced in sample size.\n")
-        elif shannon_dict['evenness'] > 0.70:
-            f.write("somewhat balanced but with noticeable size differences.\n")
+        diversity_level = "high" if si > 2.5 else "moderate-to-high" if si > 2.0 else "moderate"
+        balance_level = "relatively balanced" if evenness > 0.85 else "somewhat balanced" if evenness > 0.70 else "imbalanced"
+        
+        f.write(f"# Shannon Index of {si:.4f} indicates {diversity_level} genetic diversity across populations.\n")
+        f.write(f"# Evenness of {evenness:.2%} suggests populations are {balance_level} in sample size.\n")
+
+def print_summary_report(pop_summary: pd.DataFrame) -> None:
+    """Print professional summary report."""
+    print("\n" + "="*70)
+    print("📊 DATASET EQUITY AUDIT SUMMARY")
+    print("="*70)
+    
+    if 'super_pop' in pop_summary.columns:
+        # European ancestry percentage
+        eur_data = pop_summary[pop_summary['super_pop'] == 'EUR']
+        if not eur_data.empty and not pd.isna(eur_data['super_percent'].iloc[0]):
+            eur_pct = eur_data['super_percent'].iloc[0]
+            print(f"\n🇪🇺 European ancestry: {eur_pct:.1f}%")
         else:
-            f.write("imbalanced, with some populations much larger than others.\n")
+            print(f"\n🇪🇺 European ancestry: N/A")
+        
+        # Superpopulation distribution
+        print("\n📈 Superpopulation Distribution:")
+        super_summary = pop_summary[['super_pop', 'super_percent']].drop_duplicates().sort_values('super_percent', ascending=False)
+        for _, row in super_summary.iterrows():
+            percent = row['super_percent']
+            if pd.isna(percent):
+                bar = ""
+                percent_str = "N/A"
+            else:
+                bar = "█" * int(percent / 2)
+                percent_str = f"{percent:5.1f}%"
+            print(f"  {row['super_pop']:3}: {percent_str} {bar}")
+        
+        # Underrepresented groups
+        underrep = super_summary[
+            (super_summary['super_percent'] < CONFIG['underrepresentation_threshold']) & 
+            (super_summary['super_percent'].notna())
+        ]
+        if not underrep.empty:
+            print(f"\n⚠️  Underrepresented groups (< {CONFIG['underrepresentation_threshold']}%):")
+            for _, row in underrep.iterrows():
+                print(f"  • {row['super_pop']}: {row['super_percent']:.1f}%")
+    
+    print("\n" + "="*70)
+    print("✅ PIPELINE COMPLETE")
+    print("="*70)
 
-def main():
+def main() -> None:
     """Main execution pipeline."""
-
+    print("🚀 Starting Dataset Equity Audit Pipeline")
+    print("="*50)
+    
     # Create output directory
     OUTPUT_DIR.mkdir(exist_ok=True)
-    print(f"Output directory: {OUTPUT_DIR}")
+    logger.info(f"Output directory: {OUTPUT_DIR}")
     
     # Load data
     try:
         df = load_metadata(INPUT_METADATA_FILE)
     except FileNotFoundError:
-        print(f"\nERROR: Input file '{INPUT_METADATA_FILE}' not found!")
-        print("Please update INPUT_METADATA_FILE in the configuration section.")
+        logger.error(f"Input file '{INPUT_METADATA_FILE}' not found!")
+        logger.error("Please update INPUT_METADATA_FILE in the configuration section.")
         return
     except Exception as e:
-        print(f"\nERROR loading data: {e}")
+        logger.error(f"Error loading data: {e}")
         return
     
-    # Compute population summary (Bren's work)
+    # Process data
+    logger.info("Computing population summary...")
     pop_summary = compute_population_summary(df)
     pop_summary.to_csv(POPULATION_SUMMARY_FILE, index=False)
-    print(f"\n✓ Saved: {POPULATION_SUMMARY_FILE}")
+    logger.info(f"✅ Saved: {POPULATION_SUMMARY_FILE}")
     
-    # Compute missingness (Cyan's work)
+    logger.info("Computing missingness analysis...")
     missingness_df = compute_missingness(df)
     
-    # Compute Shannon diversity (Cyan's work)
+    logger.info("Computing Shannon diversity...")
     shannon_dict = compute_shannon_diversity(df)
     
     # Save missingness report
+    logger.info(f"Missingness dataframe shape: {missingness_df.shape}")
+    logger.info(f"Missingness dataframe empty: {missingness_df.empty}")
+    
     if not missingness_df.empty:
         save_missingness_report(missingness_df, shannon_dict, MISSINGNESS_REPORT_FILE)
-        print(f"✓ Saved: {MISSINGNESS_REPORT_FILE}")
+        logger.info(f"✅ Saved: {MISSINGNESS_REPORT_FILE}")
+    else:
+        logger.warning("Missingness dataframe is empty, skipping report creation")
     
-    # Summary statistics for final report
-    print("\n" + "="*70)
-    print("SUMMARY FOR FINAL REPORT")
-    print("="*70)
+    # Print summary
+    print_summary_report(pop_summary)
     
-    if 'super_pop' in pop_summary.columns:
-        eur_pct = pop_summary[pop_summary['super_pop'] == 'EUR']['super_percent'].iloc[0]
-        print(f"\n% European ancestry: {eur_pct:.1f}%")
-        
-        print("\nSuperpopulation distribution:")
-        super_summary = pop_summary[['super_pop', 'super_percent']].drop_duplicates()
-        for _, row in super_summary.iterrows():
-            print(f"  {row['super_pop']}: {row['super_percent']:.1f}%")
-        
-        # Identify underrepresented groups (< 15%)
-        underrep = super_summary[super_summary['super_percent'] < 15]
-        if not underrep.empty:
-            print(f"\nUnderrepresented groups (< 15%):")
-            for _, row in underrep.iterrows():
-                print(f"  {row['super_pop']}: {row['super_percent']:.1f}%")
-    
-    print("\n" + "="*70)
-    print("PIPELINE COMPLETE")
-    print("="*70)
-    print(f"\nOutputs created:")
-    print(f"  1. {POPULATION_SUMMARY_FILE}")
-    print(f"  2. {MISSINGNESS_REPORT_FILE}")
+    print(f"\n📁 Outputs created:")
+    print(f"   1. {POPULATION_SUMMARY_FILE}")
+    print(f"   2. {MISSINGNESS_REPORT_FILE}")
+    print("\n🎉 Analysis complete!")
 
 
 if __name__ == "__main__":
