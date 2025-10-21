@@ -286,12 +286,10 @@ def main() -> None:
     logger.info(f"Missingness dataframe shape: {missingness_df.shape}")
     logger.info(f"Missingness dataframe empty: {missingness_df.empty}")
     
-    if not missingness_df.empty:
-        save_missingness_report(missingness_df, shannon_dict, MISSINGNESS_REPORT_FILE)
-        logger.info(f"✅ Saved: {MISSINGNESS_REPORT_FILE}")
-    else:
-        logger.warning("Missingness dataframe is empty, skipping report creation")
-    
+
+    save_missingness_report(missingness_df, shannon_dict, MISSINGNESS_REPORT_FILE)
+    logger.info(f"✅ Saved: {MISSINGNESS_REPORT_FILE}")
+
     # Print summary
     print_summary_report(pop_summary)
     
