@@ -42,7 +42,7 @@ plt.title('Ancestry Composition')
 #plt.axis('equal')  # 保证图像为圆形
 plt.savefig('ancestry_composition.png')
 
-plt.figure(figsize=(12, 8))
+plt.figure(figsize=(16, 12))
 for i, pop in enumerate(data.keys()):
     plt.subplot(2, 3, i+1)
     data = read_pop('population_summary.csv', pop)
@@ -55,7 +55,6 @@ for i, pop in enumerate(data.keys()):
     )
     plt.title(f'{pop} Composition')
     plt.axis('equal')  # 保证图像为圆形
-plt.show()
-plt.savefig('detailed_ancestry_composition.png')
+plt.savefig('detailed_composition.png')
 
 
