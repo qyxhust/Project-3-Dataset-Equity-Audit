@@ -107,8 +107,8 @@ plt.savefig('detailed_ancestry_composition.png')
 
 # cyan's code generalized
 df = pd.read_csv(path)
+df_super = df[['super_pop', 'super_percent']].drop_duplicates()
+shannon_super = -sum(row * math.log(row) for row in df_super["super_percent"])
+shannon_sub = -sum(row * math.log(row) for row in df_super["percent"])
 
-shannon_sub = -sum(row * math.log(row) for row in df["percent"])
-shannon_super = -sum(row * math.log(row) for row in df["super_percent"])
-
-print(f" Shannon sub: {shannon_sub}, Shannon super: {shannon_super}")
+print(f"Shannon sub: {shannon_sub}, Shannon super: {shannon_super}")
