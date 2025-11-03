@@ -1,0 +1,19 @@
+Mean Nucleotide diversity per superpopulation
+AFR: π = 0.0418
+AMR: π = 0.0333
+EAS: π = 0.0294
+EUR: π = 0.0322
+SAS: π = 0.0332
+Unknown: π = 0.0362
+====================================================================================================
+Pairwise FST results
+Pairwise FST between AFR and AMR: 0.10619967251681763
+Pairwise FST between AFR and EAS: 0.15099903123962363
+Pairwise FST between AFR and EUR: 0.11653407336546348
+Pairwise FST between AFR and SAS: 0.11025820064056466
+Pairwise FST between AMR and EAS: 0.0743566226025225
+Pairwise FST between AMR and EUR: 0.025635757012613867
+Pairwise FST between AMR and SAS: 0.03359106733155839
+Pairwise FST between EAS and EUR: 0.09921877485721267
+Pairwise FST between EAS and SAS: 0.06715637803887169
+Pairwise FST between EUR and SAS: 0.03478280748975409
