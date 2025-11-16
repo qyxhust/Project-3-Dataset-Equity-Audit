@@ -1,0 +1,18 @@
+FST is short for Fixation Subpopulation relative to Total population. 
+- It measures genetic differentiation between populations.
+- It ranges from 0 to 1, and tells you how genetically different two populations are from each other.
+ 
+
+Pairwise FST is calculated by iterating through every combination of superpopulations
+- It takes into account inter and intrapopulation genetic diversity
+- It returns three arrays: 
+    - between population variance per variant (a)
+    - within population variance per variant (b)
+    - sample size correction per variant (c)
+
+Final FST is sum(a) / sum(a) + sum(b) + sum(c)
+
+Looking at our heatmap in /fst_heatmap.png, we can see that:
+- there is the most genetic differences between the AFR superpopulation and all other superpopulations
+- All other superpopulations have very little pairwise FST metrics, <0.01.
+    - This means there isn't much difference genetically between all other superpopulations. 
