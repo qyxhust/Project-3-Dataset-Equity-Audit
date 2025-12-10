@@ -31,3 +31,7 @@ origin/cyan-week2
 *.pkl
 *.csv
  origin/cyan-week3
+__pycache__/
+*.pyc
+__pycache__/
+*.pyc
