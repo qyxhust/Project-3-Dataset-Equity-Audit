@@ -1,0 +1,19 @@
+# Large data files
+data/**/*.vcf
+data/**/*.vcf.gz
+*.bed
+*.bim
+*.fam
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary
+*.tmp
+*.log
