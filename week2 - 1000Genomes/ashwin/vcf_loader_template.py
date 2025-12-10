@@ -9,12 +9,13 @@ This file Map sample IDs to superpopulations using the panel file, computes alle
 import allel
 import pandas as pd
 import numpy as np
-
+import time
 # Configuration
 VCF_FILE = "ALL.chr22.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf"
 PANEL_FILE = "integrated_call_samples_v3.20130502.ALL.panel"  # 1000 genomes panel ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/release/20130502/integrated_call_samples_v3.20130502.ALL.panel
 OUTPUT_FILE = "allele_freqs.csv"
 
+start_time = time.time()
 # Load VCF data for chromosome 22
 callset = allel.read_vcf(VCF_FILE, fields=['variants/*', 'calldata/GT', 'samples'])
 
@@ -117,3 +118,6 @@ for pop in superpops:
     if freq_col in df.columns:
         mean_freq = df[freq_col].mean()
         print(f"  {pop} mean alternate allele frequency: {mean_freq:.4f}")
+
+time_diff= time.time() - start_time
+print(f"Total time: {time_diff}")

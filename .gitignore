@@ -21,4 +21,13 @@ Thumbs.db
 =======
 .venv
 *.egg-info/
+HEAD
 origin/cyan-week2
+=======
+*.vcf
+*.panel
+*__pycache__
+.claude
+*.pkl
+*.csv
+ origin/cyan-week3
