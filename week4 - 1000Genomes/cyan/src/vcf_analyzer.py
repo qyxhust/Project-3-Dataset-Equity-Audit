@@ -9,25 +9,30 @@ Organization: Computational Biology at Berkeley
 
 import allel
 import pandas as pd
-import numpy as np
 import os
 import time
 
+from fst_heatmap import create_fst_heatmap, create_fst_matrix
+
 from config import (
-    VCF_FILE, PANEL_FILE, CACHE_FILE,
-    NUCLEOTIDE_DIVERSITY_CSV, PAIRWISE_FST_CSV, SEQUENCE_DIVERGENCE_CSV
+    VCF_FILE,
+    PANEL_FILE,
+    CACHE_FILE,
+    NUCLEOTIDE_DIVERSITY_CSV,
+    PAIRWISE_FST_CSV,
+    SEQUENCE_DIVERGENCE_CSV,
 )
 from data_loader import (
     load_vcf_with_cache,
     load_population_mapping,
     map_samples_to_populations,
-    print_population_summary
+    print_population_summary,
 )
 from population_genetics import (
     calculate_heterozygosity_observed,
     calculate_nucleotide_diversity_per_population,
     calculate_pairwise_fst,
-    calculate_sequence_diversity_per_population
+    calculate_sequence_diversity_per_population,
 )
 
 
@@ -44,8 +49,13 @@ def load_or_calculate_pi(pi_csv_file, genotypes, sample_superpops, superpops):
             genotypes, sample_superpops, superpops
         )
         pi_df = pd.DataFrame(
-            [{"Superpopulation": pop, "Nucleotide_Diversity_pi": pi.item() if hasattr(pi, "item") else pi}
-             for pop, pi in pi_results.items()]
+            [
+                {
+                    "Superpopulation": pop,
+                    "Nucleotide_Diversity_pi": pi.item() if hasattr(pi, "item") else pi,
+                }
+                for pop, pi in pi_results.items()
+            ]
         )
         pi_df.to_csv(pi_csv_file, index=False)
         print(f"Calculated and saved nucleotide diversity to {pi_csv_file}")
@@ -63,8 +73,10 @@ def load_or_calculate_fst(fst_csv_file, genotypes, pop_indices, superpops):
         print(f"Loaded FST from {fst_csv_file}")
     else:
         fst_results = calculate_pairwise_fst(genotypes, pop_indices, superpops)
-        fst_rows = [{"Pop1": pop1, "Pop2": pop2, "Pairwise_FST": fst}
-                    for (pop1, pop2), fst in fst_results.items()]
+        fst_rows = [
+            {"Pop1": pop1, "Pop2": pop2, "Pairwise_FST": fst}
+            for (pop1, pop2), fst in fst_results.items()
+        ]
         fst_df = pd.DataFrame(fst_rows)
         fst_df.to_csv(fst_csv_file, index=False)
         print(f"Calculated and saved FST to {fst_csv_file}")
@@ -72,7 +84,9 @@ def load_or_calculate_fst(fst_csv_file, genotypes, pop_indices, superpops):
     return fst_results
 
 
-def load_or_calculate_diversity(div_csv_file, genotypes, pos, sample_superpops, superpops):
+def load_or_calculate_diversity(
+    div_csv_file, genotypes, pos, sample_superpops, superpops
+):
     """Load sequence diversity from CSV if exists, otherwise calculate."""
     if os.path.exists(div_csv_file):
         div_df = pd.read_csv(div_csv_file)
@@ -84,8 +98,10 @@ def load_or_calculate_diversity(div_csv_file, genotypes, pos, sample_superpops, 
         sequence_div = calculate_sequence_diversity_per_population(
             genotypes, pos, sample_superpops, superpops
         )
-        div_rows = [{"Superpopulation": pop, "Sequence_Diversity": div}
-                    for pop, div in sequence_div.items()]
+        div_rows = [
+            {"Superpopulation": pop, "Sequence_Diversity": div}
+            for pop, div in sequence_div.items()
+        ]
         div_df = pd.DataFrame(div_rows)
         div_df.to_csv(div_csv_file, index=False)
         print(f"Calculated and saved sequence diversity to {div_csv_file}")
@@ -110,7 +126,9 @@ def main():
 
     # Load population mapping
     panel = load_population_mapping(PANEL_FILE)
-    sample_superpops, superpops, pop_indices = map_samples_to_populations(samples, panel)
+    sample_superpops, superpops, pop_indices = map_samples_to_populations(
+        samples, panel
+    )
     print_population_summary(sample_superpops, superpops)
 
     # Calculate or load population genetics metrics
@@ -122,23 +140,28 @@ def main():
         PAIRWISE_FST_CSV, genotypes, pop_indices, superpops
     )
 
+
+    # create fst heatmap
+    fst_matrix = create_fst_matrix(fst_results=fst_results, populations=superpops)
+    create_fst_heatmap(fst_matrix=fst_matrix, superpops=superpops)
+
     sequence_div = load_or_calculate_diversity(
         SEQUENCE_DIVERGENCE_CSV, genotypes, pos, sample_superpops, superpops
     )
 
     # Print results
-    print("\n" + "="*100)
+    print("\n" + "=" * 100)
     print("Mean Nucleotide diversity per superpopulation")
     for pop, pi in pi_results.items():
         pi_value = pi.item() if hasattr(pi, "item") else pi
         print(f"{pop}: π = {pi_value:.4f}")
 
-    print("="*100)
+    print("=" * 100)
     print("Pairwise FST results")
     for (pop1, pop2), fst in fst_results.items():
         print(f"Pairwise FST between {pop1} and {pop2}: {fst}")
 
-    print("="*100)
+    print("=" * 100)
     print("Sequence diversity per superpopulation")
     for pop, div in sequence_div.items():
         print(f"{pop}: {div}")
